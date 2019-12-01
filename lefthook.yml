@@ -3,7 +3,6 @@ pre-commit:
   commands:
     standard-rb:
       skip_empty: false
-      # files: git diff --name-only --staged
-      # glob: "*.rb"
-      run: standardrb
-      # --force-exclusion {files}
+      files: git diff --name-only --staged
+      glob: "*.rb"
+      run: standardrb --force-exclusion {files}
