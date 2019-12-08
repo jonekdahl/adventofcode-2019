@@ -11,13 +11,13 @@ class Computer
     @program = program
   end
 
-  def run(inputs = [])
+  def run(input_queue, output_queue)
     @memory = @program.clone
     # @memory[1] = noun
     # @memory[2] = verb
     @ip = 0
-    @inputs = inputs
-    @outputs = []
+    @input_queue = input_queue
+    @output_queue = output_queue
     until opcode == 99
       execute_instruction
     end
@@ -91,13 +91,14 @@ class Computer
     when 2
       write(3, read(1) * read(2))
     when 3
-      raise "Input was never defined" unless @inputs.any?
-      input = @inputs.shift
+      # puts "#{Thread.current.name}: waiting for input"
+      input = @input_queue.pop
+      # puts "#{Thread.current.name}: read input #{input}"
       write(1, input)
     when 4
       output = read(1)
-      # puts "Output: #{output}"
-      @outputs << output
+      # puts "#{Thread.current.name}: wrote output: #{output}"
+      @output_queue << output
     when 5
       unless read(1).zero?
         @ip = read(2)
@@ -122,21 +123,33 @@ class Computer
   end
 end
 
+def create_worker(name, program, inputs, outputs)
+  Thread.new { Computer.new(program).run(inputs, outputs) }.tap { |t| t.name = name }
+end
+
 def simulate(program, phase_settings)
-  outputs0 = Computer.new(program).run([phase_settings[0], 0]).outputs
-  outputs1 = Computer.new(program).run([phase_settings[1], outputs0[0]]).outputs
-  outputs2 = Computer.new(program).run([phase_settings[2], outputs1[0]]).outputs
-  outputs3 = Computer.new(program).run([phase_settings[3], outputs2[0]]).outputs
-  outputs4 = Computer.new(program).run([phase_settings[4], outputs3[0]]).outputs
-  outputs4[0]
+  queues = phase_settings.map { |phase_setting|
+    Queue.new.tap { |q| q << phase_setting }
+  }
+  queues[0] << 0
+
+  threads = []
+  threads << create_worker("A", program, queues[0], queues[1])
+  threads << create_worker("B", program, queues[1], queues[2])
+  threads << create_worker("C", program, queues[2], queues[3])
+  threads << create_worker("D", program, queues[3], queues[4])
+  threads << create_worker("E", program, queues[4], queues[0])
+
+  threads.each { |thr| thr.join }
+  queues[0].pop
 end
 
 def search(program)
   max_thruster = -1_000_000
-  phase_permutations = (0..4).to_a.permutation
+  phase_permutations = (5..9).to_a.permutation
   phase_permutations.each do |phase_settings|
     thruster = simulate(program, phase_settings)
-    #puts "phase settings: #{phase_settings}, thruster: #{thruster}"
+    # puts "phase settings: #{phase_settings}, thruster: #{thruster}"
     max_thruster = thruster > max_thruster ? thruster : max_thruster
   end
   max_thruster
